@@ -1,16 +1,20 @@
-# vllm/vllm-openai has CUDA 12.4 + PyTorch pre-matched — no version roulette
+# CUDA + PyTorch already matched for vLLM
 FROM vllm/vllm-openai:latest
 
 WORKDIR /workspace
 
-# Allow pip to override distutils-installed system packages (common in CUDA images)
+# allow pip to override distutils packages in CUDA images
 ENV PIP_BREAK_SYSTEM_PACKAGES=1
 
-# Install git (required for pip to clone from GitHub)
-RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+# install git (needed for cloning repos)
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git && \
+    rm -rf /var/lib/apt/lists/*
 
-# Fix LD_LIBRARY_PATH permanently so pip-bundled nvidia libs are always found
-# (avoids libnvrtc-builtins missing errors across all RunPod instances)
+# upgrade pip early
+RUN python3 -m pip install --upgrade pip
+
+# fix nvrtc library path (avoids CUDA runtime errors)
 RUN NVIDIA_LIB=$(python3 -c \
       "import nvidia.cuda_nvrtc, os; print(os.path.dirname(nvidia.cuda_nvrtc.__file__))" \
       2>/dev/null || echo "") && \
@@ -20,30 +24,29 @@ RUN NVIDIA_LIB=$(python3 -c \
 
 ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/nvidia/lib64:/usr/local/nvidia/lib:$LD_LIBRARY_PATH
 
-# Pre-create caches on /workspace (survives pod restarts, large volume)
+# create persistent caches
 RUN mkdir -p /workspace/.cache/huggingface \
              /workspace/.cache/pip \
+             /workspace/tmp \
              /root/.cache/huggingface
 
 ENV HF_HOME=/workspace/.cache/huggingface \
     PIP_CACHE_DIR=/workspace/.cache/pip \
     TMPDIR=/workspace/tmp
 
-RUN mkdir -p $TMPDIR
-
-# Install GLM-OCR and its deps (vLLM already in base image)
+# install dependencies
 RUN pip install --no-cache-dir \
-    git+https://github.com/huggingface/transformers.git \
+    transformers \
     pillow \
     pyyaml \
     uv
 
+# install GLM-OCR
 RUN git clone https://github.com/zai-org/glm-ocr.git /workspace/glm-ocr && \
     cd /workspace/glm-ocr && \
-    pip install --no-cache-dir -e .
+    pip install --no-cache-dir --ignore-installed -e .
 
 EXPOSE 8080
 
-# Override entrypoint — prevents RunPod crash loop from auto-starting vLLM
-# SSH in and run `vllm serve ...` manually when ready
+# prevent auto-start of vllm in RunPod
 ENTRYPOINT ["/bin/bash"]
