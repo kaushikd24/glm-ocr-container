@@ -3,6 +3,9 @@ FROM vllm/vllm-openai:latest
 
 WORKDIR /workspace
 
+# Install git (required for pip to clone from GitHub)
+RUN apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
+
 # Fix LD_LIBRARY_PATH permanently so pip-bundled nvidia libs are always found
 # (avoids libnvrtc-builtins missing errors across all RunPod instances)
 RUN NVIDIA_LIB=$(python3 -c \
