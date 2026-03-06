@@ -48,5 +48,6 @@ RUN git clone https://github.com/zai-org/glm-ocr.git /workspace/glm-ocr && \
 
 EXPOSE 8080
 
-# prevent auto-start of vllm in RunPod
-ENTRYPOINT ["/bin/bash"]
+# Keep container alive without a TTY — prevents RunPod restart loop
+# SSH in and run `vllm serve ...` manually when ready
+ENTRYPOINT ["/bin/bash", "-c", "tail -f /dev/null"]
